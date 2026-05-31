@@ -145,6 +145,13 @@ async def countdown(ctx, secondi: int = 10):
 # -------------------- MODERAZIONE --------------------
 
 @client.command()
+async def elimina(ctx, *, parola: str):
+    def contiene_parola(msg):
+        return parola.lower() in msg.content.lower()
+    eliminati = await ctx.channel.purge(check=contiene_parola)
+    await ctx.send(f'Ho eliminato {len(eliminati)} messaggi contenenti **{parola}**.')
+
+@client.command()
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, utente: discord.Member, *, motivo: str = 'Nessun motivo specificato'):
     await utente.ban(reason=motivo)
@@ -199,6 +206,7 @@ async def aiuto(ctx):
 
     embed.add_field(name='🛡️ Moderazione', value='''
 `<clear <n>` — cancella n messaggi
+`<elimina <parola>` — cancella messaggi con "parola"
 `<ban @utente` — banna un utente
 `<kick @utente` — kicka un utente
 `<muta @utente` — muta un utente
