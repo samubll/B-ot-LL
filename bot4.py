@@ -146,6 +146,7 @@ async def countdown(ctx, secondi: int = 10):
 
 @client.command()
 async def elimina(ctx, *, parola: str):
+    await ctx.message.delete()
     def contiene_parola(msg):
         return parola.lower() in msg.content.lower()
     eliminati = await ctx.channel.purge(check=contiene_parola)
