@@ -134,8 +134,8 @@ async def poll(ctx, *, domanda: str):
 
 @client.command()
 async def countdown(ctx, secondi: int = 10):
-    if secondi > 30:
-        await ctx.send('Massimo 30 secondi! ❌')
+    if secondi > 300:
+        await ctx.send('Massimo 300 secondi! ❌')
         return
     for i in range(secondi, 0, -1):
         await ctx.send(f'⏳ {i}...')
