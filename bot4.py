@@ -31,6 +31,15 @@ async def on_command_error(ctx, error):
         await ctx.send('Manca un argomento! ❌')
     elif isinstance(error, commands.BadArgument):
         await ctx.send('Argomento non valido! ❌')
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send('Non hai i permessi per farlo! ❌')
+
+@client.event
+async def on_guild_join(guild):
+    channel = guild.system_channel or guild.text_channels[0]
+    await channel.send('Ciao! Sono B(ot)LL, il bot di samu. Scrivi `<aiuto` per vedere tutti i comandi!')
+
+
 
 # -------------------- BASE --------------------
 
@@ -48,6 +57,7 @@ async def ciao(ctx):
     await ctx.send(f'ciao {ctx.message.author}, sono il bot di samu.')
 
 @client.command(aliases=['cancella', 'pulisci', 'delete'])
+@commands.has_permissions(administrator=True)
 async def clear(ctx, amount: int = 1):
     await ctx.channel.purge(limit=amount + 1)
     await ctx.send(f'ho cancellato {amount} messaggi.')
@@ -145,6 +155,7 @@ async def countdown(ctx, secondi: int = 10):
 # -------------------- MODERAZIONE --------------------
 
 @client.command()
+@commands.has_permissions(administrator=True)
 async def elimina(ctx, *, parola: str):
     await ctx.message.delete()
     def contiene_parola(msg):
