@@ -75,8 +75,6 @@ async def samu(ctx):
     await ctx.send('my glorious king')
     await ctx.send('https://images.steamusercontent.com/ugc/966474717666994289/9B1983B8752F554FD7A932226DF55F9988A3E644/')
 
-import os
-
 @client.command()
 async def yana(ctx):
     percorso = "imgprova.jpeg"
