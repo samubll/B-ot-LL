@@ -1,8 +1,8 @@
 import discord
+from discord import channel
 from discord.ext import commands
 import asyncio
 import random
-import os
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -21,7 +21,8 @@ print('il tuo bot si sta avviando...')
 async def on_ready():
     print(f'{client.user} è ora ONLINE', f'ID {client.user.id}')
     channel = client.get_channel(CANALE_ID)
-    await channel.send('Bot online! 🟢')
+    if channel:
+        await channel.send('Bot online! 🟢')
 
 @client.event
 async def on_command_error(ctx, error):
@@ -73,6 +74,13 @@ async def sandro(ctx):
 async def samu(ctx):
     await ctx.send('my glorious king')
     await ctx.send('https://images.steamusercontent.com/ugc/966474717666994289/9B1983B8752F554FD7A932226DF55F9988A3E644/')
+
+import os
+
+@client.command()
+async def yana(ctx):
+    percorso = "imgprova.jpeg"
+    await ctx.send(file=discord.File(percorso))
 
 # -------------------- GIOCHI --------------------
 
@@ -228,6 +236,6 @@ async def aiuto(ctx):
     await ctx.send(embed=embed)
 
 try:
-    client.run(os.getenv('DISCORD_TOKEN'))
+    client.run('DISCORD_TOKEN')
 except KeyboardInterrupt:
     pass
