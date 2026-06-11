@@ -757,7 +757,7 @@ async def samu(ctx: commands.Context):
 
 
 @bot.command()
-async def yana(ctx: commands.Context):
+async def y(ctx: commands.Context):
     percorso = "imgprova.jpeg"
     await ctx.send(file=discord.File(percorso))
 
@@ -1061,7 +1061,7 @@ async def aiuto(ctx: commands.Context):
         value=(
             "`hack @utente` — hackeraggio totalmente finto\n"
             "`roast @utente` — insulto casuale\n"
-            "`samu` / `sandro` / `yana` — inside jokes"
+            "`samu` / `sandro` / `y` — inside jokes"
         ),
         inline=False,
     )
