@@ -731,6 +731,9 @@ async def y(ctx: commands.Context):
     percorso = "imgprova.jpeg"
     await ctx.send(file=discord.File(percorso))
 
+@bot.command()
+async def striunizzo(ctx: commands.Context):
+    await ctx.send("https://i.ytimg.com/vi/NUdK1hfDYuA/hq720.jpg?sqp=-oaymwE7CK4FEIIDSFryq4qpAy0IARUAAAAAGAElAADIQj0AgKJD8AEB-AH-CYAC0AWKAgwIABABGHIgXig4MA8=&rs=AOn4CLDoaOkzyhYqM2fEWUtTE2rV_q1v6w")
 
 # Giochi
 @bot.command()
