@@ -1034,7 +1034,7 @@ async def aiuto(ctx: commands.Context):
         value=(
             "`hack @utente` — hackeraggio totalmente finto\n"
             "`roast @utente` — insulto casuale\n"
-            "`samu` / `sandro` / `y` — inside jokes"
+            "`samu` / `sandro` / `y` / `striunizzo` — inside jokes"
         ),
         inline=False,
     )
