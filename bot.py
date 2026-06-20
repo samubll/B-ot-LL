@@ -8,6 +8,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
+import ollama
 
 # Su Railway il token deve arrivare via Environment Variables/Secrets.
 # Manteniamo .env solo per sviluppo locale.
@@ -19,9 +20,35 @@ except Exception:
 # Preferisci DISCORD_TOKEN (Railway). Fallback per compatibilità.
 TOKEN = os.getenv("DISCORD_TOKEN") or os.getenv("TOKEN")
 PREFIX = os.getenv("PREFIX", "!")
+AI_MODEL = os.getenv("AI_MODEL", "qwen2.5:14b")
+AI_HOST = os.getenv("OLLAMA_HOST")
+AI_API_KEY = os.getenv("OLLAMA_API_KEY")
 
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "economy.sqlite3")
+DATA_DIR = os.getenv("DATA_DIR", os.path.dirname(__file__))
+DB_PATH = os.path.join(DATA_DIR, "economy.sqlite3")
+AI_CLIENT_OPTIONS = {}
+if AI_HOST:
+    AI_CLIENT_OPTIONS["host"] = AI_HOST
+if AI_API_KEY:
+    AI_CLIENT_OPTIONS["headers"] = {"Authorization": f"Bearer {AI_API_KEY}"}
+AI_CLIENT = ollama.Client(**AI_CLIENT_OPTIONS)
+
+AI_OPTIONS = {
+    "temperature": 0.3,
+    "top_p": 0.9,
+    "repeat_penalty": 1.1,
+    "num_ctx": 4096,
+    "num_gpu": 0,
+}
+AI_SYSTEM_PROMPT = (
+    "Sei un assistente intelligente dentro un server Discord. "
+    "Rispondi sempre in italiano corretto, in modo utile, chiaro e non troppo lungo. "
+    "Non inventare informazioni: se non sai qualcosa, dillo chiaramente."
+)
+AI_MAX_HISTORY_MESSAGES = 12
+AI_ACTIVE_CHATS: set[tuple[int, int]] = set()
+AI_CHAT_HISTORY: dict[tuple[int, int], list[dict[str, str]]] = {}
 
 # -----------------------------
 # Database helpers (economy unica)
@@ -34,6 +61,7 @@ def get_conn():
 
 
 def init_db():
+    os.makedirs(DATA_DIR, exist_ok=True)
     conn = get_conn()
     cur = conn.cursor()
 
@@ -282,6 +310,54 @@ async def send_ctx_reply(ctx: commands.Context, embed: discord.Embed | None = No
         await ctx.reply(content=content, mention_author=False)
 
 
+def split_discord_message(text: str, limit: int = 1900):
+    chunks = []
+    current = text.strip()
+    while len(current) > limit:
+        split_at = current.rfind("\n", 0, limit)
+        if split_at < 1:
+            split_at = current.rfind(" ", 0, limit)
+        if split_at < 1:
+            split_at = limit
+        chunks.append(current[:split_at].strip())
+        current = current[split_at:].strip()
+    if current:
+        chunks.append(current)
+    return chunks or ["Non ho ricevuto una risposta valida dal modello."]
+
+
+def trim_ai_history(history: list[dict[str, str]]):
+    if len(history) > AI_MAX_HISTORY_MESSAGES:
+        del history[:-AI_MAX_HISTORY_MESSAGES]
+
+
+def ask_ollama_sync(history: list[dict[str, str]], prompt: str):
+    messages = [{"role": "system", "content": AI_SYSTEM_PROMPT}]
+    messages.extend(history)
+    messages.append({"role": "user", "content": prompt})
+
+    response = AI_CLIENT.chat(
+        model=AI_MODEL,
+        messages=messages,
+        options=AI_OPTIONS,
+    )
+    answer = response["message"]["content"].strip()
+
+    history.append({"role": "user", "content": prompt})
+    history.append({"role": "assistant", "content": answer})
+    trim_ai_history(history)
+    return answer
+
+
+async def ask_ollama(history: list[dict[str, str]], prompt: str):
+    return await asyncio.to_thread(ask_ollama_sync, history, prompt)
+
+
+async def send_ai_answer(destination, text: str):
+    for chunk in split_discord_message(text):
+        await destination.reply(chunk, mention_author=False)
+
+
 # -----------------------------
 # Event
 # -----------------------------
@@ -302,6 +378,89 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
     if isinstance(error, commands.CommandNotFound):
         return
     await ctx.reply(f"❌ Errore: {type(error).__name__}: {error}", mention_author=False)
+
+
+# -----------------------------
+# AI / Ollama
+# -----------------------------
+
+@bot.event
+async def on_message(message: discord.Message):
+    if message.author.bot:
+        return
+
+    if message.content.startswith(PREFIX):
+        await bot.process_commands(message)
+        return
+
+    chat_key = (message.channel.id, message.author.id)
+    if chat_key not in AI_ACTIVE_CHATS:
+        return
+
+    history = AI_CHAT_HISTORY.setdefault(chat_key, [])
+    async with message.channel.typing():
+        try:
+            answer = await ask_ollama(history, message.content)
+        except Exception as e:
+            await message.reply(f"Errore AI: {type(e).__name__}: {e}", mention_author=False)
+            return
+
+    await send_ai_answer(message, answer)
+
+
+@bot.command(name="ai", aliases=["ask", "qwen"])
+async def ai_once(ctx: commands.Context, *, domanda: str):
+    history: list[dict[str, str]] = []
+    async with ctx.typing():
+        try:
+            answer = await ask_ollama(history, domanda)
+        except Exception as e:
+            await ctx.reply(f"Errore AI: {type(e).__name__}: {e}", mention_author=False)
+            return
+
+    await send_ai_answer(ctx, answer)
+
+
+@bot.group(name="chat", invoke_without_command=True)
+async def chat_ai(ctx: commands.Context):
+    await ctx.reply(
+        f"Uso: `{PREFIX}chat start`, `{PREFIX}chat stop`, `{PREFIX}chat reset`, oppure `{PREFIX}ai <domanda>`.",
+        mention_author=False,
+    )
+
+
+@chat_ai.command(name="start", aliases=["avvia", "inizia"])
+async def chat_start(ctx: commands.Context):
+    chat_key = (ctx.channel.id, ctx.author.id)
+    AI_ACTIVE_CHATS.add(chat_key)
+    AI_CHAT_HISTORY.setdefault(chat_key, [])
+    await ctx.reply(
+        f"Chat AI avviata in questo canale per te. Scrivi normalmente; per fermarla usa `{PREFIX}chat stop`.",
+        mention_author=False,
+    )
+
+
+@chat_ai.command(name="stop", aliases=["ferma", "fine"])
+async def chat_stop(ctx: commands.Context):
+    chat_key = (ctx.channel.id, ctx.author.id)
+    AI_ACTIVE_CHATS.discard(chat_key)
+    await ctx.reply("Chat AI fermata.", mention_author=False)
+
+
+@chat_ai.command(name="reset", aliases=["dimentica", "pulisci"])
+async def chat_reset(ctx: commands.Context):
+    chat_key = (ctx.channel.id, ctx.author.id)
+    AI_CHAT_HISTORY.pop(chat_key, None)
+    await ctx.reply("Memoria della chat AI cancellata.", mention_author=False)
+
+
+@chat_ai.command(name="status", aliases=["stato"])
+async def chat_status(ctx: commands.Context):
+    chat_key = (ctx.channel.id, ctx.author.id)
+    active = chat_key in AI_ACTIVE_CHATS
+    messages = len(AI_CHAT_HISTORY.get(chat_key, []))
+    stato = "attiva" if active else "non attiva"
+    await ctx.reply(f"Chat AI {stato}. Messaggi in memoria: {messages}.", mention_author=False)
 
 
 # -----------------------------
@@ -1035,6 +1194,17 @@ async def aiuto(ctx: commands.Context):
             "`hack @utente` — hackeraggio totalmente finto\n"
             "`roast @utente` — insulto casuale\n"
             "`samu` / `sandro` / `y` / `striunizzo` — inside jokes"
+        ),
+        inline=False,
+    )
+
+    embed.add_field(
+        name="AI",
+        value=(
+            "`ai <domanda>` - fai una domanda singola a Qwen\n"
+            "`chat start` - avvia una chat AI continua nel canale\n"
+            "`chat stop` - ferma la chat AI\n"
+            "`chat reset` - cancella la memoria della chat AI"
         ),
         inline=False,
     )
